@@ -1,0 +1,25 @@
+# Editor and tool state
+.vscode/
+.idea/
+
+# Python environment — large, machine-specific, rebuildable
+.venv/
+
+# Python build artefacts
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Test and coverage caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# Downloaded datasets and generated output
+data/
+outputs/
