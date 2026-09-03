@@ -1,11 +1,9 @@
 """Rolling-origin splitting: which positions to train on, which to test on.
 
-Pure arithmetic. Given only the length of a series, decide where each training
-window ends and each test block begins. No data, no dates, no numpy.
+Pure arithmetic on the length of the series. No data, no dates, no numpy.
 
-Every range is half-open: [start, end) includes start and excludes end. Two
-adjacent ranges therefore share one number, so they can neither overlap nor
-leave a gap.
+Every range is half-open, [start, end), so two adjacent ranges share a number
+and can neither overlap nor leave a gap.
 """
 
 from typing import NamedTuple
@@ -21,10 +19,10 @@ class Fold(NamedTuple):
 
 
 def _check_parameters(n: int, horizon: int, step: int, min_train_size: int) -> None:
-    """Reject arguments whose arithmetic would be legal but meaningless.
+    """Refuse arguments whose arithmetic is legal but meaningless.
 
     A step of 0 never advances the cut point; a horizon of 0 tests nothing.
-    Neither raises on its own, and both return something that looks like a
+    Neither raises on its own -- both return something that looks like a
     result, which is worse than a crash.
     """
     if horizon < 1:
@@ -49,15 +47,13 @@ def make_folds(
 ) -> list[Fold]:
     """Return the folds for a series of n points, oldest first.
 
-    The training window expands: every fold trains on everything from position 0
-    up to its own cut point. step defaults to horizon, which makes the test
-    blocks tile exactly, so no position is tested twice and none is skipped.
+    The training window expands: every fold trains on everything from position
+    0 up to its own cut point. step defaults to horizon, which makes the test
+    blocks tile exactly -- nothing tested twice, nothing skipped.
 
-    A fold is emitted only if it is complete. Positions left over at the end are
-    not tested: a short final fold would be scored over fewer points than the
-    others, so averaging it with them would be arithmetic nonsense.
-
-    Raises ValueError if the parameters are nonsensical or no fold fits in n.
+    Incomplete folds are never emitted, so trailing positions may go untested.
+    A short final fold would be scored over fewer points than the others, and
+    averaging that with them is arithmetic nonsense.
     """
     if step is None:
         step = horizon
