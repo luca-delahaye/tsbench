@@ -7,7 +7,7 @@ so the four models can be read side by side.
 import numpy as np
 import pytest
 
-from tsbench.models import Drift, Mean, Naive, SeasonalNaive
+from tsbench.models import Drift, Mean, Model, Naive, SeasonalNaive
 
 # Seven points rising by 10. Last value 160, mean 910 / 7 = 130,
 # slope (160 - 100) / 6 = 10.
@@ -100,3 +100,37 @@ def test_too_little_history_is_refused():
 def test_nonsense_period_is_refused():
     with pytest.raises(ValueError, match="period must be at least 1"):
         SeasonalNaive(period=0)
+
+
+def test_models_declare_what_they_need():
+    """Each states its own floor; evaluate.py takes the largest across a run."""
+    assert Naive().min_train_size == 1
+    assert Mean().min_train_size == 1
+    assert Drift().min_train_size == 2
+    assert SeasonalNaive(period=24).min_train_size == 24
+
+
+def test_predicting_before_fitting_is_refused():
+    """Was an AttributeError naming a private field. Now it says what is wrong."""
+    with pytest.raises(ValueError, match="must be fitted before predicting"):
+        Naive().predict(3)
+
+
+def test_nonsense_horizon_is_refused():
+    """Horizon 0 used to return an empty array with no complaint at all."""
+    for horizon in (0, -5):
+        with pytest.raises(ValueError, match="horizon must be at least 1"):
+            Naive().fit(TRAIN).predict(horizon)
+
+
+def test_the_interface_itself_cannot_be_instantiated():
+    """A model that forgets _predict fails here, not deep inside the fold loop."""
+    with pytest.raises(TypeError):
+        Model()
+
+    class Forgetful(Model):
+        def _fit(self, y_train):
+            pass
+
+    with pytest.raises(TypeError):
+        Forgetful()
