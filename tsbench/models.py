@@ -27,6 +27,11 @@ class Model(ABC):
     _fitted = False
 
     @property
+    def name(self) -> str:
+        """Label for the results table. Two models in one run need two names."""
+        return type(self).__name__
+
+    @property
     def min_train_size(self) -> int:
         """Fewest training points this model can say anything from.
 
@@ -98,6 +103,10 @@ class SeasonalNaive(Model):
         if period < 1:
             raise ValueError(f"period must be at least 1, got {period}")
         self.period = period
+
+    @property
+    def name(self) -> str:
+        return f"SeasonalNaive({self.period})"
 
     @property
     def min_train_size(self) -> int:
