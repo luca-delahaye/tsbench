@@ -1,9 +1,7 @@
 """Tests for the fold loop.
 
-The linear series 0, 1, 2, ... 99 is used throughout because every model's
-error on it can be worked out by hand. Naive predicts the last value for all
-7 steps, so its errors are 1, 2, 3, 4, 5, 6, 7 and its MAE is 4 in every fold.
-Drift extrapolates the line exactly, so it scores 0.
+The line 0, 1, ... 99 is used throughout because every model's error on it
+can be worked out by hand: naive scores 4 per fold, drift scores 0.
 """
 
 import numpy as np
@@ -29,12 +27,7 @@ def test_drift_is_exact_on_a_straight_line():
 
 
 def test_the_baseline_scores_exactly_one():
-    """Naive is what MASE divides by, so it must score 1.0 in every fold.
-
-    Holds on any series. A number other than 1.0 here means the harness fed
-    the baseline different data from the model, which would make every other
-    MASE meaningless.
-    """
+    """Naive is what MASE divides by, so it must score 1.0 in every fold."""
     results = evaluate(LINEAR, [Naive()], horizon=7)
     assert results["Naive"]["mase"] == [1.0] * len(results["Naive"]["mase"])
 
@@ -64,10 +57,7 @@ def test_results_carry_one_entry_per_fold_per_metric():
 
 
 def test_a_flat_series_scores_mase_as_none():
-    """The baseline is exactly right, so the ratio would divide by zero.
-
-    MAE and RMSE are still recorded: only the ratio is undefined.
-    """
+    """The baseline is exactly right, so the ratio would divide by zero."""
     results = evaluate(np.full(100, 42.0), [Naive(), Mean()], horizon=7)
     for scores in results.values():
         assert all(m is None for m in scores["mase"])
@@ -90,9 +80,8 @@ def test_two_seasonal_models_are_told_apart_by_period():
     assert set(results) == {"SeasonalNaive(7)", "SeasonalNaive(14)"}
 
 
-# A series with real structure: trend, a weekly cycle, and noise. Fixed seed,
-# so the numbers below are reproducible.
 def _synthetic(n=200):
+    """A trend plus a weekly cycle plus noise, from a fixed seed."""
     rng = np.random.default_rng(0)
     t = np.arange(n)
     return 100 + 0.5 * t + 20 * np.sin(2 * np.pi * t / 7) + rng.normal(0, 5, n)
@@ -102,19 +91,7 @@ MODELS = lambda: [Naive(), Mean(), Drift(), SeasonalNaive(7)]
 
 
 def test_corrupting_the_future_changes_nothing():
-    """The lookahead test. The single most valuable test in this repo.
-
-    Score the first 60 points. Then score a 200-point series whose first 60
-    points are identical and whose remaining 140 are garbage. Every fold that
-    lives entirely inside the first 60 must produce byte-identical scores.
-
-    Not similar -- identical. Those folds were never supposed to see the
-    corrupted region, so if one digit moves, something read the future.
-
-    This catches all three leaks at once, without caring how careful anyone
-    was being: a centred rolling window, an off-by-one in a trailing window,
-    and a scaler fitted on the whole series before splitting.
-    """
+    """The lookahead test. The single most valuable test in this repo."""
     values = _synthetic(200)
     cut = 60
 
@@ -134,12 +111,7 @@ def test_corrupting_the_future_changes_nothing():
 
 
 def test_the_lookahead_test_has_teeth():
-    """A test that cannot fail proves nothing.
-
-    Corrupting a point inside every training window must change the scores.
-    If this passes while the test above also passes, the test above is
-    measuring something real rather than comparing two identical runs.
-    """
+    """A test that cannot fail proves nothing."""
     values = _synthetic(200)
 
     corrupted = values.copy()

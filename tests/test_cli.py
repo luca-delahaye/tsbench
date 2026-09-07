@@ -1,8 +1,7 @@
 """Tests for the command line.
 
-The CLI decides nothing, so these check the two small choices it does make
-(the default seasonal period, and which models get built) plus one run from
-end to end.
+The CLI decides nothing, so these check the two small choices it makes and
+one run from end to end.
 """
 
 import pandas as pd

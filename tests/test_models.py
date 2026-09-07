@@ -9,8 +9,6 @@ import pytest
 
 from tsbench.models import Drift, Mean, Model, Naive, SeasonalNaive
 
-# Seven points rising by 10. Last value 160, mean 910 / 7 = 130,
-# slope (160 - 100) / 6 = 10.
 TRAIN = np.array([100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 160.0])
 
 
@@ -40,11 +38,7 @@ def test_drift_goes_downhill_too():
 
 
 def test_drift_is_blind_to_shape():
-    """A series ending where it started forecasts flat, whatever happened between.
-
-    Not a bug: the slope is the mean one-step change, and those changes sum to
-    zero here. Worth asserting so the limitation is documented, not discovered.
-    """
+    """A series ending where it started forecasts flat, whatever happened between."""
     round_trip = np.array([100.0, 500.0, 20.0, 300.0, 100.0])
     assert np.allclose(Drift().fit(round_trip).predict(3), np.full(3, 100.0))
 

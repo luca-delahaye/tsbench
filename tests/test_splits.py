@@ -1,9 +1,7 @@
 """Tests for the rolling-origin splitter.
 
-The expected folds below were worked out by hand. That is deliberate: a test
-that recomputes the implementation's own arithmetic cannot catch it being
-wrong. Every number here can be checked against the diagram in the docstring
-of tsbench/splits.py.
+Expected folds are written out by hand, so the test cannot agree with a
+wrong implementation by repeating its arithmetic.
 """
 
 import pytest
@@ -12,11 +10,7 @@ from tsbench.splits import Fold, make_folds
 
 
 def test_known_answer():
-    """23 points, horizon 4, at least 5 to train on.
-
-    positions:  0 .. 4 | 5  6  7  8 | 9 10 11 12 | 13 .. 16 | 17 .. 20 | 21 22
-                train     test 1       test 2       test 3     test 4    unused
-    """
+    """23 points, horizon 4, at least 5 to train on."""
     assert make_folds(23, 4, min_train_size=5) == [
         Fold(0, 5, 5, 9),
         Fold(0, 9, 9, 13),

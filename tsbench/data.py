@@ -1,15 +1,7 @@
 """Reading a CSV into a series the rest of the project can trust.
 
-Not a converter, an airlock. Every other file is built on one assumption:
-
-    position N is exactly N steps in time.
-
-That is a lie unless somebody checks it. If three hours are missing from an
-hourly file, "look back 24 positions" quietly lands 27 hours ago, forever,
-and nothing tells you. So the checks happen once, here, at the door.
-
-This is the only file that touches pandas, and the only one that knows what
-a date is. Everything downstream counts positions.
+An airlock, not a converter: it refuses anything that would break "position
+N is N steps in time". The only file that touches pandas or knows a date.
 """
 
 from typing import NamedTuple
@@ -27,12 +19,7 @@ class Series(NamedTuple):
 
 
 def _read_columns(path, time_column, value_column):
-    """Read the two columns we care about, or say which one is missing.
-
-    keep_default_na=False stops pandas quietly turning 'n/a', 'NULL' and
-    friends into NaN while reading. We want the original text to survive
-    that far, so the error message can quote what was actually in the file.
-    """
+    """Read the two columns we care about, keeping their text as written."""
     frame = pd.read_csv(path, keep_default_na=False)
     for column in (time_column, value_column):
         if column not in frame.columns:
@@ -55,11 +42,7 @@ def _parse_timestamps(frame, time_column):
 
 
 def _parse_values(frame, value_column, stamps):
-    """Turn the value column into floats, naming the first bad row.
-
-    A single stray 'n/a' makes pandas read the whole column as text, so this
-    has to be checked rather than assumed.
-    """
+    """Turn the value column into floats, naming the first bad row."""
     values = pd.to_numeric(frame[value_column], errors="coerce")
     if values.isna().any():
         row = int(values.isna().idxmax())
@@ -71,12 +54,7 @@ def _parse_values(frame, value_column, stamps):
 
 
 def _check_ordered(stamps):
-    """Refuse unsorted or duplicated timestamps.
-
-    Out of order means the past is no longer behind you in the array.
-    Duplicates mean two rows for the same moment, so every lag after that
-    point is off by one.
-    """
+    """Refuse unsorted or duplicated timestamps, naming the offending row."""
     if stamps.duplicated().any():
         row = int(stamps.duplicated().idxmax())
         raise ValueError(f"row {row}: {stamps.iloc[row]} appears twice")
@@ -95,12 +73,7 @@ def _spacing(stamps):
 
 
 def _check_no_gaps(stamps, freq):
-    """Refuse a series with a hole in it, naming where and how big.
-
-    Refusing is the default on purpose. Interpolating a gap and then testing
-    over it scores the model against numbers we invented, and it will do
-    beautifully. --fill-gaps exists, but it has to be typed.
-    """
+    """Refuse a series with a hole in it, naming where and how big."""
     steps = stamps.diff()
     gaps = steps > freq
     if gaps.any():
@@ -124,12 +97,7 @@ def _fill_gaps(values, stamps, freq):
 
 
 def load_series(path, time_column, value_column, fill_gaps=False) -> Series:
-    """Read a CSV and hand back a series that the rest of the project can trust.
-
-    Refuses anything that would break "position N is N steps in time":
-    unparseable dates or numbers, duplicates, wrong order, or gaps. Errors
-    name the row, because "gap at 2011-03-14 03:00" beats "gap at 1783".
-    """
+    """Read a CSV into a validated Series, refusing anything untrustworthy."""
     frame = _read_columns(path, time_column, value_column)
     stamps = _parse_timestamps(frame, time_column)
     values = _parse_values(frame, value_column, stamps)

@@ -1,8 +1,7 @@
 """Tests for the CSV airlock.
 
-Each test writes a tiny CSV to a temporary directory and asks data.py to
-read it. The point of the file is what it refuses, so most of these check an
-error message rather than a value.
+Each test writes a tiny CSV to a temporary directory. The point of the file
+is what it refuses, so most of these check a message rather than a value.
 """
 
 import numpy as np
@@ -13,6 +12,7 @@ from tsbench.data import load_series
 
 
 def write_csv(directory, rows, header="date,value"):
+    """Write rows to a CSV in a temporary directory and return its path."""
     path = directory / "series.csv"
     path.write_text(header + "\n" + "\n".join(rows) + "\n")
     return path
@@ -54,10 +54,7 @@ def test_a_gap_is_refused_and_located(tmp_path):
 
 
 def test_gaps_can_be_filled_but_only_on_purpose(tmp_path):
-    """Interpolating and then testing over the gap scores invented numbers.
-
-    The flag is the record that somebody looked and decided.
-    """
+    """Interpolating and then testing over the gap scores invented numbers."""
     gapped = ["2024-01-01,10", "2024-01-02,20", "2024-01-04,40"]
     series = load_series(write_csv(tmp_path, gapped), "date", "value", fill_gaps=True)
 

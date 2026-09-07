@@ -1,9 +1,7 @@
 """Rolling-origin splitting: which positions to train on, which to test on.
 
-Pure arithmetic on the length of the series. No data, no dates, no numpy.
-
-Every range is half-open, [start, end), so two adjacent ranges share a number
-and can neither overlap nor leave a gap.
+Pure arithmetic on the length of the series: no data, no dates, no numpy.
+Ranges are half-open, so adjacent ones cannot overlap or leave a gap.
 """
 
 from typing import NamedTuple
@@ -19,12 +17,7 @@ class Fold(NamedTuple):
 
 
 def _check_parameters(n: int, horizon: int, step: int, min_train_size: int) -> None:
-    """Refuse arguments whose arithmetic is legal but meaningless.
-
-    A step of 0 never advances the cut point; a horizon of 0 tests nothing.
-    Neither raises on its own -- both return something that looks like a
-    result, which is worse than a crash.
-    """
+    """Refuse arguments whose arithmetic would be legal but meaningless."""
     if horizon < 1:
         raise ValueError(f"horizon must be at least 1, got {horizon}")
     if step < 1:
@@ -45,16 +38,7 @@ def make_folds(
         step: int | None = None,
         min_train_size: int = 1,
 ) -> list[Fold]:
-    """Return the folds for a series of n points, oldest first.
-
-    The training window expands: every fold trains on everything from position
-    0 up to its own cut point. step defaults to horizon, which makes the test
-    blocks tile exactly -- nothing tested twice, nothing skipped.
-
-    Incomplete folds are never emitted, so trailing positions may go untested.
-    A short final fold would be scored over fewer points than the others, and
-    averaging that with them is arithmetic nonsense.
-    """
+    """Return the complete folds for a series of n points, oldest first."""
     if step is None:
         step = horizon
     _check_parameters(n, horizon, step, min_train_size)

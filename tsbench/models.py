@@ -1,14 +1,7 @@
 """Forecasting models, all behind one interface.
 
-    model.fit(y_train)       here is the past, work out your recipe
-    model.predict(horizon)   give me the next N numbers
-
-evaluate.py loops over a list of these and never asks what kind it is
-holding, so a baseline is scored by exactly the same code path as a real
-model. That is what makes the comparison honest rather than something to
-be trusted.
-
-Positions only, no dates. Seasonality arrives as an integer period.
+fit(y_train) then predict(horizon). evaluate.py loops over these without
+asking what kind each one is, so a baseline is scored like any other model.
 """
 
 from abc import ABC, abstractmethod
@@ -17,33 +10,22 @@ import numpy as np
 
 
 class Model(ABC):
-    """What every model shares, so each one is written as only its recipe.
-
-    Subclasses implement _fit and _predict. The public fit and predict wrap
-    them with the checks every model would otherwise repeat, so a model added
-    later cannot forget them.
-    """
+    """What every model shares, so each one is written as only its recipe."""
 
     _fitted = False
 
     @property
     def name(self) -> str:
-        """Label for the results table. Two models in one run need two names."""
+        """Label for the results table; two models in a run need two names."""
         return type(self).__name__
 
     @property
     def min_train_size(self) -> int:
-        """Fewest training points this model can say anything from.
-
-        The model only declares the constraint. evaluate.py takes the largest
-        across every model in a run and uses it as the floor for all of them,
-        so the folds stay identical -- which is what MASE needs to mean
-        anything.
-        """
+        """Fewest training points this model can say anything from."""
         return 1
 
     def fit(self, y_train: np.ndarray) -> "Model":
-        """Learn from the training window. Returns self, so calls can chain."""
+        """Learn from the training window and return self, so calls chain."""
         y_train = np.asarray(y_train, dtype=float)
         if len(y_train) < self.min_train_size:
             raise ValueError(
@@ -55,7 +37,7 @@ class Model(ABC):
         return self
 
     def predict(self, horizon: int) -> np.ndarray:
-        """Forecast the next `horizon` points. Always returns an array."""
+        """Forecast the next `horizon` points, always as an array."""
         if horizon < 1:
             raise ValueError(f"horizon must be at least 1, got {horizon}")
         if not self._fitted:
@@ -65,14 +47,16 @@ class Model(ABC):
         return self._predict(horizon)
 
     @abstractmethod
-    def _fit(self, y_train: np.ndarray) -> None: ...
+    def _fit(self, y_train: np.ndarray) -> None:
+        """Work out this model's recipe from the training window."""
 
     @abstractmethod
-    def _predict(self, horizon: int) -> np.ndarray: ...
+    def _predict(self, horizon: int) -> np.ndarray:
+        """Apply the recipe to produce `horizon` values."""
 
 
 class Naive(Model):
-    """Tomorrow = today. The bar, and surprisingly hard to beat."""
+    """Tomorrow = today: the bar, and surprisingly hard to beat."""
 
     def _fit(self, y_train):
         self._last = y_train[-1]
@@ -92,12 +76,7 @@ class Mean(Model):
 
 
 class SeasonalNaive(Model):
-    """Tomorrow = the same point one period ago, cycling if asked for more.
-
-    period is an integer offset, never a calendar: 7 for a weekly cycle in
-    daily data, 24 for a daily cycle in hourly data, 168 for a weekly cycle
-    in hourly data.
-    """
+    """Tomorrow = the same point one period ago, cycling for longer horizons."""
 
     def __init__(self, period):
         if period < 1:
@@ -120,13 +99,7 @@ class SeasonalNaive(Model):
 
 
 class Drift(Model):
-    """Tomorrow = today plus the average step taken so far.
-
-    The slope (last - first) / (n - 1) is exactly the mean one-step change:
-    the interior terms telescope away. So it is blind to shape -- a series
-    that rose and crashed back gets the same forecast as one that never
-    moved. That is fine for a baseline, and worth knowing when reading one.
-    """
+    """Tomorrow = today plus the mean one-step change, so blind to shape."""
 
     @property
     def min_train_size(self) -> int:

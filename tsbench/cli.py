@@ -2,9 +2,7 @@
 
     python -m tsbench run data/day.csv --time dteday --value cnt --horizon 7
 
-Nothing is decided here. This file parses flags, calls the pieces in order,
-and prints what came back. Every check that matters already happened
-upstream, in data.py and splits.py.
+Decides nothing. Parses flags, calls the pieces in order, prints the table.
 """
 
 import argparse
@@ -18,18 +16,13 @@ from tsbench.models import Drift, Mean, Naive, SeasonalNaive
 
 
 def default_period(freq):
-    """The obvious seasonal cycle for this spacing, as a number of positions.
-
-    Daily rows repeat weekly, hourly rows repeat daily. Anything else gets no
-    seasonal model rather than a guess. This is the one place allowed to turn
-    a duration into a count -- models.py only ever sees the integer.
-    """
+    """The obvious seasonal cycle for this spacing, as a count of positions."""
     known = {pd.Timedelta(days=1): 7, pd.Timedelta(hours=1): 24}
     return known.get(freq)
 
 
 def describe_freq(freq):
-    """Readable spacing: 'daily' beats '1 days 00:00:00' in a header."""
+    """Readable spacing, so a header says 'daily' not '1 days 00:00:00'."""
     known = {pd.Timedelta(days=1): "daily", pd.Timedelta(hours=1): "hourly",
              pd.Timedelta(weeks=1): "weekly", pd.Timedelta(minutes=1): "per minute"}
     return known.get(freq, str(freq))
@@ -44,6 +37,7 @@ def build_models(period):
 
 
 def print_header(path, series, horizon, step, folds, first_cut):
+    """Print what was read and how it was split."""
     span = f"{series.timestamps[0].date()} to {series.timestamps[-1].date()}"
     print(f"{path}: {len(series.values)} points, {describe_freq(series.freq)}, {span}")
     print(f"horizon {horizon}, step {step}, {folds} folds, first cut at {first_cut}")
@@ -51,7 +45,7 @@ def print_header(path, series, horizon, step, folds, first_cut):
 
 
 def print_table(summary):
-    """One row per model, widest columns first."""
+    """Print one row per model, best MASE first."""
     head = f"{'model':<20}{'MAE':>9}{'RMSE':>9}{'MASE':>9}{'median':>9}{'won':>7}"
     print(head)
     print("-" * len(head))
@@ -92,6 +86,7 @@ def write_plot(path, series, horizon):
 
 
 def run(args):
+    """Load, evaluate, print, and optionally plot."""
     series = load_series(args.path, args.time, args.value, fill_gaps=args.fill_gaps)
 
     period = args.period if args.period else default_period(series.freq)
@@ -112,6 +107,7 @@ def run(args):
 
 
 def build_parser():
+    """Build the argument parser for `python -m tsbench`."""
     parser = argparse.ArgumentParser(
         prog="python -m tsbench",
         description="Score forecasting models against a naive baseline.",
@@ -135,6 +131,7 @@ def build_parser():
 
 
 def main(argv=None):
+    """Entry point: parse arguments and run, turning refusals into exits."""
     args = build_parser().parse_args(argv)
     try:
         run(args)

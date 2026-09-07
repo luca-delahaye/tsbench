@@ -1,19 +1,16 @@
 # tsbench
 
-Score forecasting models against a naive baseline, under walk-forward
-validation that cannot accidentally cheat.
+Walk-forward evaluation of forecasting models against a naive baseline.
 
-## What this is
+## What it does
 
-Take any column of numbers recorded over time — bike rentals, electricity
-load, order volumes — and find out whether a model actually beats doing
-nothing clever.
+Reads a CSV containing a time series, splits it using rolling-origin
+validation, runs several forecasting models over the same folds, and reports
+how each one scored relative to a naive baseline.
 
-**The models are the easy part.** Most of them are three lines. The product
-is the harness around them: the machinery that evaluates a forecast in a way
-that cannot see the future. Anyone can call a forecasting library. The
-harder thing is being able to show that your evaluation is honest, which is
-what this repository is for.
+The models included are baselines: naive, seasonal naive, mean and drift.
+Most of the code is the evaluation harness rather than the models — the
+splitting, the input validation and the scoring.
 
 ## Install
 
@@ -27,8 +24,8 @@ python -m pip install -r requirements.txt
 
 ## Getting the data
 
-The example data is not committed — it belongs to UCI, not to this
-repository. Two files, about 1 MB:
+The example data is not committed, since it belongs to UCI. Two files, about
+1 MB:
 
 ```bash
 mkdir -p data
@@ -38,12 +35,10 @@ unzip -o data/bike.zip -d data/
 ```
 
 That gives `data/day.csv` (731 daily rows, no gaps) and `data/hour.csv`
-(17,379 hourly rows, with gaps). Any other CSV with a timestamp column and a
-value column works just as well.
+(17,379 hourly rows, with gaps). Any CSV with a timestamp column and a value
+column will work.
 
 ## Quickstart
-
-Any CSV with a timestamp column and a value column:
 
 ```bash
 python -m tsbench run data/day.csv --time dteday --value cnt --horizon 7
@@ -61,14 +56,24 @@ SeasonalNaive(7)        934.3   1193.0   1.1943   1.0749   45%
 Mean                   1612.9   1729.5   2.1917   1.5478   27%
 ```
 
+| Flag | Meaning |
+|---|---|
+| `--time`, `--value` | column names in the CSV |
+| `--horizon` | steps predicted per fold (default 7) |
+| `--step` | how far the cut advances between folds (default: horizon) |
+| `--period` | seasonal cycle length (default: inferred from the spacing) |
+| `--fill-gaps` | interpolate missing rows instead of refusing the file |
+| `--plot` | write a PNG of the series and the final test block |
+
 ## How the evaluation works
 
-A random train/test split is meaningless for a time series: to predict
-Wednesday, the model would be handed Tuesday *and Thursday*. In real life
-the future is not available, so a test that supplies it measures nothing.
+A random train/test split does not measure forecasting performance on a time
+series: predicting Wednesday would give the model access to both Tuesday and
+Thursday. Since later values are not available when a forecast is actually
+made, a test that supplies them measures something else.
 
-Instead the origin walks forward. Train on everything up to a cut point,
-predict the next few steps, score, then move the cut and repeat:
+Instead the origin moves forward. The model trains on everything up to a cut
+point, predicts the next few steps, is scored, and the cut advances:
 
 ```
 |---- train ----|-test-|
@@ -77,51 +82,47 @@ predict the next few steps, score, then move the cut and repeat:
 |---------- train ----------|-test-|
 ```
 
-Two parameters: `--horizon` is how far ahead each fold predicts, `--step` is
-how far the cut advances between folds. Step defaults to horizon, so the
-test blocks tile exactly — nothing is scored twice and nothing is skipped.
+`--horizon` is how far ahead each fold predicts. `--step` is how far the cut
+advances between folds, and defaults to the horizon so that test blocks tile
+exactly: no position is scored twice and none is skipped.
 
-**Every model is scored on identical folds.** The first cut point is the
-largest `min_train_size` in the run, so adding a seasonal model with period
-24 pushes every model's first cut forward together. Without that, MASE would
-be a ratio of two errors measured on different data, which is not a
-comparison at all.
+All models are scored on the same folds. The first cut point is the largest
+`min_train_size` among the models in the run, so adding a seasonal model with
+period 24 moves the first cut forward for every model. If the folds differed,
+MASE would be a ratio of two errors measured on different data.
 
-Incomplete folds are never emitted. A short final fold would be scored over
-fewer points than the others, so averaging it with them is arithmetic
-nonsense.
+Incomplete folds are not produced. A short final fold would be scored over
+fewer points than the others, so it could not be averaged with them.
 
 ## Metrics
 
 | Metric | Meaning |
 |---|---|
-| **MAE** | Average size of a miss, in the series' own units |
-| **RMSE** | Same, but one big miss costs more than several small ones. RMSE near MAE means steadily mediocre; RMSE far above it means usually fine with rare disasters |
-| **MASE** | The model's MAE divided by the baseline's, on the same test block. Below 1 beats the baseline |
+| **MAE** | Average size of an error, in the series' units |
+| **RMSE** | Same, weighted so one large error costs more than several small ones. RMSE close to MAE indicates consistent errors; RMSE much larger indicates occasional large ones |
+| **MASE** | The model's MAE divided by the baseline's, over the same test block. Below 1 means the model beat the baseline |
 
-MASE is the headline because it is the only one whose value means something
-on its own. A MAE of 12.4 is excellent on a series averaging 12,000 and
-dreadful on one averaging 120.
+MASE is the headline figure because its value can be read without knowing the
+scale of the series. An MAE of 12.4 means something different on a series
+averaging 12,000 than on one averaging 120.
 
-**Note on the definition.** This is the *relative* form: a ratio of two
-out-of-sample errors, both measured over the same block at the same horizon.
-Hyndman's MASE instead scales by the one-step naive error measured on the
-training data. Those are different numbers and the two are not comparable.
-The relative form is used here because it keeps the horizons matched — if
-the model is asked to predict 24 hours ahead, so is the baseline it is
-measured against.
+**Definition used.** This is the relative form: a ratio of two out-of-sample
+errors, both measured over the same block at the same horizon. Hyndman's MASE
+scales instead by the one-step naive error measured on the training data.
+The two are different quantities and are not comparable. The relative form is
+used here so that the model and the baseline are asked the same question — if
+the model predicts 24 hours ahead, so does the baseline it is compared to.
 
-Both the mean and the median MASE are reported, along with the share of
-folds the model actually won, because one number per model would be the
-easiest thing in the world to mislead with.
+The mean MASE, the median MASE and the share of folds won are all reported, so
+that a single averaged figure does not stand in for the distribution.
 
 ## Results
 
 Capital Bikeshare, Washington DC, 2011–2012
-([UCI Bike Sharing Dataset](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset)).
-The same system at two sampling rates.
+([UCI Bike Sharing Dataset](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset)),
+at two sampling rates.
 
-### Daily, horizon 7 — nothing beats naive
+### Daily, horizon 7
 
 ```
 model                     MAE     RMSE     MASE   median    won
@@ -131,17 +132,16 @@ SeasonalNaive(7)        934.3   1193.0   1.1943   1.0749   45%
 Mean                   1612.9   1729.5   2.1917   1.5478   27%
 ```
 
-731 points, 103 folds. **Nothing beat the baseline.** "Tomorrow will be like
-today" is hard to improve on when the weekly cycle is weak — the daily
-totals only vary about 10% across weekdays.
+731 points, 103 folds. No model beat the baseline. The weekly cycle in the
+daily totals is small — the weekday averages range from 4,229 to 4,690, about
+10% — so repeating the previous value is difficult to improve on.
 
-Note what the spread shows that the mean hides. Seasonal naive has a mean
-MASE of 1.19, which reads as clearly worse. But it beats naive in **45% of
-folds**: it is close to a coin flip that occasionally goes badly wrong, not
-a model that is uniformly bad. That is a different fact, and only visible
-because the distribution is reported.
+The mean and the spread disagree here. Seasonal naive has a mean MASE of
+1.1943, but beats naive in 45% of folds and has a median of 1.0749. Its
+average is raised by a small number of poor folds rather than by being
+consistently worse.
 
-### Hourly, horizon 24 — the seasonal baseline wins decisively
+### Hourly, horizon 24
 
 ```
 model                     MAE     RMSE     MASE   median    won
@@ -151,17 +151,16 @@ Naive                   140.5    183.3   1.0000   1.0000    0%
 Mean                    131.7    167.4   1.0137   0.9266   72%
 ```
 
-17,544 points, 730 folds. The daily cycle here is enormous — about 12
-rentals at 3am against 461 at 5pm — so "the same hour yesterday" cuts the
-error roughly in half and wins 90% of folds.
+17,544 points, 730 folds. The daily cycle is large — hourly averages run from
+about 12 rentals at 3am to 461 at 5pm — and seasonal naive roughly halves the
+error, winning 90% of folds.
 
-**Caveat, stated rather than buried.** The hourly file is missing 165 of its
-17,544 rows, in 75 separate gaps. This run used `--fill-gaps`, so those rows
-were interpolated, and some test blocks therefore contain invented numbers
-that every model is scored against. The daily result above needs no such
-flag and is the cleaner of the two.
+**Caveat.** The hourly file is missing 165 of its 17,544 rows, across 75
+gaps. This run used `--fill-gaps`, so those rows were interpolated and some
+test blocks contain values that were not measured. The daily result requires
+no such flag.
 
-Reproducing the hourly run needs the timestamp assembled first, since the
+Reproducing the hourly run requires assembling the timestamp first, since the
 raw file splits it across two columns:
 
 ```python
@@ -176,97 +175,87 @@ python -m tsbench run data/hour_prepared.csv --time timestamp --value cnt \
     --horizon 24 --fill-gaps
 ```
 
-### Reading these two together
+### Summary
 
-The daily result is the honest negative: most of the time nothing beats the
-baseline, and a tool that never says so is not measuring anything. The
-hourly result shows the same harness detecting a real signal when one is
-there. Neither is rigged in either direction.
+On the daily series no model beat the baseline. On the hourly series, where
+there is a strong repeating cycle, the seasonal baseline beat it clearly. The
+two results come from the same code and the same underlying system.
 
 ## The lookahead test
 
-Lookahead bias — code that saw data from after the cut point — is how most
-amateur backtests quietly produce results that cannot be reproduced in real
-time. It almost never happens at the split. It happens in feature
-construction, and every version of it is correct-looking code: nothing
-errors, nothing looks wrong on review, and the result is simply better than
-it should be.
+Lookahead bias means code that used data from after the cut point. It is
+usually introduced during feature construction rather than at the split, and
+it does not raise an error: the code runs, and the reported score is better
+than it should be.
 
-Being careful is not a strategy. So there is a test:
+`tests/test_evaluate.py` checks for it directly:
 
-> Score a clean prefix of the series. Then score a longer series whose first
-> N points are identical and whose remaining points have been replaced with
-> garbage. Every fold living entirely inside the clean part must produce
-> **identical** scores. Not similar — identical.
+> Score a prefix of the series. Then score a longer series whose first N
+> points are identical and whose remaining points have been replaced with
+> large arbitrary values. Every fold contained entirely within the first N
+> points must produce identical scores.
 
-Those folds were never supposed to see the corrupted region. If one digit
-moves, something read the future. This catches a centred rolling window, an
-off-by-one in a trailing one, and a scaler fitted before splitting, without
-caring how careful anyone was being.
+Those folds were not supposed to read the replaced region, so any change in
+the score means something did. This covers a centred rolling window, an
+off-by-one in a trailing window, and a scaler fitted before splitting, without
+requiring the code to be inspected for them.
 
-A second test corrupts a point in the *past* instead, and requires the
-scores to change — because a test that cannot fail proves nothing.
+A second test replaces a point in the *past* instead and requires the scores
+to change, so that the first test is known to be capable of failing.
 
-The guarantee itself lives in two lines, in the only file that slices the
-series:
+The property being tested comes from `evaluate.py` being the only module that
+slices the series:
 
 ```python
 train = values[fold.train_start:fold.train_end]
 actual = values[fold.test_start:fold.test_end]
 ```
 
-Everything else receives arrays and never learns where they came from.
+Every other module receives arrays and has no access to their position in the
+series.
 
-## Reading a CSV is not a formality
+## Input validation
 
-Every module downstream is built on one assumption:
+Every module downstream of `data.py` assumes that position N is exactly N
+steps in time. If rows are missing from an hourly file, looking back 24
+positions lands more than 24 hours earlier, and nothing reports it.
 
-> position N is exactly N steps in time
-
-That is a lie unless somebody checks it. If three hours are missing from an
-hourly file, "look back 24 positions" quietly lands 27 hours ago, forever,
-and nothing tells you. So `data.py` is an airlock, not a converter. It
-refuses unparseable dates and numbers, duplicate or out-of-order timestamps,
-and gaps — naming the row and the timestamp:
+`data.py` therefore refuses unparseable dates and values, duplicate or
+out-of-order timestamps, and gaps, identifying the row and the timestamp:
 
 ```
 error: row 29: 1 missing at 2011-01-02 04:00:00 (jumps to 2011-01-02 06:00:00);
 75 gaps in total. Pass --fill-gaps to interpolate them.
 ```
 
-Gaps are refused **by default**. Interpolating a hole and then testing over
-it scores the model against numbers we invented, and it will do beautifully.
-`--fill-gaps` exists, but it has to be typed — and it reports how many rows
-it added.
+Gaps are refused by default. Interpolating a gap and then evaluating over it
+scores the model partly against interpolated values. `--fill-gaps` enables it
+explicitly and reports how many rows were added.
 
-## What this deliberately does not do
+## Out of scope
 
-- Multivariate series or exogenous regressors. The bike data ships with
-  temperature and humidity; they are ignored on purpose.
-- Deep learning. Nothing here needs it.
+- Multivariate series and exogenous regressors. The bike data includes
+  temperature and humidity; they are not used.
+- Neural network models.
 - Hyperparameter search.
 - Irregular or mixed-frequency series.
 - A web interface.
-
-Shipping something small that is correct beats shipping something large that
-is unfinished.
 
 ## Layout
 
 ```
 tsbench/
-  data.py       CSV in, validated series out. The only file that knows dates
-  splits.py     pure arithmetic: which positions to train and test on
+  data.py       CSV in, validated series out; the only module using pandas
+  splits.py     which positions to train and test on, as arithmetic
   models.py     one interface, four baselines
   metrics.py    MAE, RMSE, MASE
-  evaluate.py   the loop, and the only file that slices the series
+  evaluate.py   the fold loop; the only module that slices the series
   cli.py        python -m tsbench run data.csv
 tests/
 ```
 
-The arrows only point one way. `data.py` does not know models exist,
-`models.py` does not know CSV files exist, and `metrics.py` just subtracts
-two arrays.
+Dependencies run one way. `data.py` does not import models, `models.py` does
+not read files, and `metrics.py` operates on two arrays.
 
 ## Tests
 
@@ -274,12 +263,12 @@ two arrays.
 python -m pytest
 ```
 
-68 tests. Expected values are worked out by hand rather than recomputed from
-the implementation, since a test that repeats the implementation's own
-arithmetic cannot catch that arithmetic being wrong.
+68 tests. Expected values are written out by hand rather than recomputed from
+the implementation, so that a test cannot agree with an incorrect
+implementation by repeating its arithmetic.
 
-## Next
+## Possible extensions
 
-- Ridge regression on lag features, as the first model that is not a baseline
+- Ridge regression on lag features, as a first non-baseline model
 - Prediction intervals from residual quantiles
 - Direct versus recursive multi-step forecasting
