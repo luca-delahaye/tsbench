@@ -109,7 +109,7 @@ def _check_no_gaps(stamps, freq):
         raise ValueError(
             f"row {row}: {missing} missing at {stamps.iloc[row - 1]} "
             f"(jumps to {stamps.iloc[row]}); "
-            f"{int(gaps.sum())} gaps in total. Use fill_gaps=True to interpolate."
+            f"{int(gaps.sum())} gaps in total. Pass --fill-gaps to interpolate them."
         )
 
 
